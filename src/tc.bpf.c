@@ -1,4 +1,4 @@
-//#pragma clang diagnostic ignored "-Wcompare-distinct-pointer-types"
+#pragma clang diagnostic ignored "-Wcompare-distinct-pointer-types"
 
 #include <bits/types.h>
 #include <linux/bpf.h>
@@ -176,9 +176,9 @@ int classification(struct __sk_buff *skb) {
   add_socket_len(skb, nh_off);
 
   if (h_proto == bpf_htons(ETH_P_IP)) {
-    // if (is_hello(skb, nh_off) == 1) {
-    //   bpf_printk("Yes! It is Hello World!\n");
-    // }
+    if (is_hello(skb, nh_off) == 1) {
+      bpf_printk("Yes! It is Hello World!\n");
+    }
   }
 
   return TC_ACT_OK;
