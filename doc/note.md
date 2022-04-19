@@ -107,3 +107,25 @@ __read_mostly: 我们可以将经常需要被读取的数据定义为 __read_mos
 linux test_bit: https://www.cnblogs.com/zxc2man/p/14653138.html, int test_bit(nr, void *addr) 原子的返回addr位所指对象nr位
 一些开发的指导：
 https://gitee.com/openeuler/kernel/wikis/Contributions%20to%20openEuler%20kernel%20project
+
+tcp_out_options 核心 struct
+tcp_options_write 核心设置 tcp_options 函数
+const struct sock *sk 核心设置
+
+net/socket.c#L2905 SYSCALL_DEFINE2(socketcall, int, call, unsigned long __user *, args) 处调用__sys_setsockopt
+||
+||
+net/socket.c#L2180  __sys_setsockopt 函数这里面会调用 tcp_prot.setsockopt
+||
+||
+net/ipv4/tcp_ipv4.c#L3063 struct proto tcp_prot 结构体里面的 setsockopt 函数存放 tcp_setsockopt 指针
+||
+||
+net/ipv4/tcp.c#L3690 tcp_setsockopt()
+||
+||
+net/ipv4/tcp.c#L3387 do_tcp_setsockopt()
+
+想办法修改 tcp_out_options 选项, 增加 tcp_comp_tx 和 tcp_comp_rx, 和 OPTION_COMP 相辅相成, 在 tcp_established_options 中写 socket opt
+
+/home/shouxunsun/sunshouxun/randylambert/home/randylambert/kernel-5.10.0-79.0.0/include/uapi/linux/tcp.h 131
