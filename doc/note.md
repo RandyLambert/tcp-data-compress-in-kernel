@@ -127,5 +127,73 @@ net/ipv4/tcp.c#L3690 tcp_setsockopt()
 net/ipv4/tcp.c#L3387 do_tcp_setsockopt()
 
 想办法修改 tcp_out_options 选项, 增加 tcp_comp_tx 和 tcp_comp_rx, 和 OPTION_COMP 相辅相成, 在 tcp_established_options 中写 socket opt
+tcp_parse_aligned_timestamp
 
-/home/shouxunsun/sunshouxun/randylambert/home/randylambert/kernel-5.10.0-79.0.0/include/uapi/linux/tcp.h 131
+在网络网络传输过程中，最关心的就是传输效率问题。而提高传输效率最有效的方法就是对传输的数据进行压缩。但压缩数据也要耗费一定的时间，是不是压缩后一定能提高效率呢？
+
+1.数据传输时间
+假设数据大小为 D (MB)
+网络带宽为 N (MBps)  -------------注意这里是MBps，而不是通常说的Mbps,      1MBps = 10Mbps,       1000Mbps=100MBps.
+那么数据传输时间T1 = D/N
+
+2.压缩后的数据传输时间
+
+假设压缩算法压缩率为 R ------------------ 即压缩后数据大小为 D*R
+
+压缩速度为         Vc MB/S
+解压缩速度为       Vd MB/S
+那么压缩后的数据传输时间 T2 =  D/Vc + D*R/N + D/Vd  = D/N * ( R + N/Vc + N/Vd)
+
+3.分析
+对比：
+        T1 = D/N
+        T2 = D/N*(R+N/Vc+N/vd)
+发现：
+        如果R + N/Vc + N/Vd < 1,则压缩后传输要更快，否则压缩后传输反而更慢。
+        也就是压缩后传输能否更快是和压缩算法的 “压缩率”，“压缩/解压缩速度” 以及当前“带宽”相关
+        压缩率越小，压缩/解压缩越快，带宽越小，压缩后传输越能提高效率。而在带宽不变得情况下，压缩率越小，压缩/解压缩越快 越好。
+       而由于压缩率和压缩/解压缩速度成指数型反比（压缩率提高一点点，压缩/解压缩速度就大幅降低），所以在选用压缩算法时：
+        最好选择压缩/解压缩速度快的算法，而不必太关注压缩率（当然也不能完全不压缩）
+
+4.常用压缩算法对比
+    这是来自网上一个常用压缩算法压缩比，压缩/解压缩速度对比图：
+
+    压缩率R为 1/Ratio。
+    ZSTD v1.3.4 在压缩等级为 1 的 Ratio 为 2.877, Vc 为 470, Vd 为 1380
+    那么带入到上面公式：
+    ZSTD v1.3.4 ：1/2.877 + N/470 + N/1380 = 0.35 + N*0.00285   也就是说在带宽 N < 228 MBps的情况下，采用 ZSTD v1.3.4 压缩能提高传输效率。
+
+5.总结
+  一般客户端访问服务器，需进行压缩。 （目前客户端到服务器的带宽还是比较低的）
+  服务器间传输，可以不压缩，或者用 ZSTD 压缩。 （服务器间的带宽一般是1000bps，即100MBps）
+
+  大于 228 MBps     普通传输就可以，因为网络传输速度远远高于压缩及解压缩速度了
+
+
+前辈您好, 感谢您一直解答我的问题, 我已经在虚拟机上安装了openeuler 的内核, 跑了一下压缩的功能, 很强大!
+
+剩下的时间, 我用 libbpf 先简单的写了一下 eBPF 探测流量的功能, 我写了一个 tc 程序, 功能是在 ingress 和 egress 将个 socket 发送/接受 的数据大小写到一个 eBPF map 中, 然后用户态定时去读取这个 map 中的数据, 来看这段时间 发送/接受 数据的量, 以此实现 tcp 流级别的流量检查, 我这里有几个问题想请教一下您:
+1. BPF 在这里检测的时候也是会有一定的性能消耗的, 这样的性能消耗是否值得?或者说我这样统计流量速率是否合理?
+2. 我认为系统在高 CPU 负载和高内存负载时也不应该去打开压缩算法, 所以我还简单写了一些探测 CPU 和 内存使用的统计, 不过是从 /proc/ 目录下直接拿的. 据我了解, socket 中的内存分配会使用 socket 所在 numa node 的内存资源, 所以我想问这部分有必要去拿一些更细粒度的信息吗? 比如各个 numa node 的内存分配情况, 或者是内存碎片率之类的. (不过我认为这个问题的优先级不高, 目前不太需要考虑这些)
+
+后面的时间, 为了让 eBPF 和内核的压缩模块进行结合, 据我目前的了解和查询了一些资料, 我发现 BPF 程序单独做不了像流量分析这种功能, 它只负责统计数据放到 map 中, 用户态拿数据进行分析, 得出结论, 因此如果需要和对端进行协商是否要打开压缩功能, 需要利用 setsockopt() 选项做, 因此我就开始写设置套接字选项的功能, 不过目前还没有测试。
+我目前先写的是 comp_tx 的功能, 不过我认为现在的实现还有很多问题和缺陷
+实现流程如下:
+我先在 tcp_sock 结构体上新增了 comp_tx 字段 ,这个字段是通过 setsockopt() 函数进行修改的, 实现方法是在 do_tcp_setsockopt() 处增加了解析 TCP_COMP sockopt 选项的代码, 这里直接将 comp_tx 字段写为 true,下一步我修改了 tcp_options_write 函数, 新增的写 comp_tx 选项到数据包的代码.
+在接收端我在 tcp_options_received 结构体中也新加了 comp_tx 选项, 同时修改了 tcp_parse_options 函数, 在此函数中解析了新增的 comp_tx 选项, 将解析写到 tcp_options_received 结构体之中.
+在后续进行 tcp_comp_sendmsg 时, 首先会判断 tcp_sock 中 comp_tx 是否打开, 如果打开了则继续往下走, 如果没有打开, 则执行之前的 sendmsg 函数, 同理, 在进行 tcp_comp_recvmsg 时, 会先判断 tcp_options_received 中 comp_tx 选项是否打开, 如果打开则继续往下走, 如果没有则执行之前的 sendmsg 函数.
+
+目前这样的实现方案有很多问题
+1. tcp_parse_options 函数并不会在每次接收包的时候调用, 我这里贴一下源码注释:
+     /* Look for tcp options. Normally only called on SYN and SYNACK packets.
+      * But, this can also be called on packets in the established flow when
+      * the fast version below fails.
+      */
+    因此,在走快速路径的时候不会调用 tcp_parse_options 去解析 comp_tx 选项, 然后我找了下相关论文(https://inl.info.ucl.ac.be/system/files/tcp-ebpf.pdf 这篇论文是给 bpf_setsockopt 使用的), 发现这里面也是修改的 tcp_parse_options 函数的
+
+2. 按照目前的实现 comp_tx 选项会在每次发包的时候进行携带, 实际上只需要在我首次执行 setsockopt() 时写入此套接字选项, 和对方进行协商就可以了, 但是目前如何写成这样, 我只会在每次发数据包时从 tcp_sock 中去找 comp_tx 选项,然后写入 tcp 头发过去.
+3. 因为我是每次发数据包的会在包头携带参数表明当前是否打开了压缩, 这导致了实际上两方没有进行一个协商, 如果接受端目前性能已经达到瓶颈, 不适合打开压缩功能, 那这里有可能会造成负优化, 问题2和问题3的关键都在于如何写新增的 sockopt 和如何发送新增的 sockopt.
+4. 问题3里面提到了正确的做法应该是和接受端进行协商, 是否要打开压缩功能, 但是上面我提到了 eBPF 只能做到数据提取, 数据分析是在用户态做的, 因此内核态没有用户态分析出的是否需要打开压缩功能的结论, 所以如果需要实现协商功能, 还需要在新增一个 sockopt 来去做这个工作, 给内核传递当前情况下是否时候使用 压缩/解压 功能.
+5. 目前只在 setsockopt() 的路径上做了修改, 还没有更改 getsockopt(), 所以用户态暂时没办法探测某个套接字是否打开了压缩功能.
+
+这是目前我认为比较棘手的一些问题, 我想听听您的想法

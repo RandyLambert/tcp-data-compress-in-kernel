@@ -8,12 +8,24 @@
 #include <bpf/bpf.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 
 #include "tc.skel.h"
 #include "tc.h"
 
 #define BPF_SYSFS_ROOT "/sys/fs/bpf"
 #define PATH_MAX 512
+/*
+详细信息请参照 note.md
+不压缩传输速率: T1 = D/N
+压缩后传输速率: T2 = D/N*(R+N/Vc+N/vd)
+如果R + N/Vc + N/Vd < 1,则压缩后传输要更快，否则压缩后传输反而更慢。
+ZSTD 1.3.4 压缩1/2.877 + N/470 + N/1380 = 0.35 + N*0.00285
+得出结论: 对于ZSTD 1.3.4 在传输速率 小于 228 MBps 时, 应该使用压缩算法
+*/
+#define ZSTD_SPEED 228
 
 struct bpf_progs_desc {
 	char name[256];
@@ -39,7 +51,8 @@ static void bump_memlock_rlimit(void)
 	}
 }
 
-void construct_mount_path(char* pathame, char* prog_name) {
+void construct_mount_path(char* pathame, char* prog_name) 
+{
 	int len = snprintf(pathame, PATH_MAX, "%s/%s", BPF_SYSFS_ROOT, prog_name);
 	printf("mount path : %s\n", pathame);
 	if (len < 0) {
@@ -65,6 +78,73 @@ char* num_to_ip(unsigned int num, char *ip_buf)
 	sprintf(ip_buf, "%d.%d.%d.%d", p[3]&0xff,p[2]&0xff,p[1]&0xff,p[0]&0xff);
 	return ip_buf;
 }
+
+int get_meminfo() 
+{
+	MEM meminfo;
+	memset(&meminfo,0x00,sizeof(MEM));
+	FILE* fp = fopen("/proc/meminfo","r");
+ 
+	if(fp == NULL)
+	{
+		printf("Can not open file\r\n");
+		return 0;
+	}
+	
+	char buf[64];
+	char name[32];
+	memset(buf,0x00,sizeof(buf));
+	fgets(buf,sizeof(buf),fp);
+	sscanf(buf,"%s %f %s",name,&meminfo.total,name);
+	memset(buf,0x00,sizeof(buf));
+	fgets(buf,sizeof(buf),fp);
+	sscanf(buf,"%s %f %s",name,&meminfo.free,name);
+	printf("buf is %s  name is %s %f\r\n",buf,name,meminfo.free);
+	float temp;
+ 
+	sscanf(buf,"%s			%f %s",name,&temp,name);
+	printf("temp is %f \r\n",temp);
+	double rate = (meminfo.total - meminfo.free)/meminfo.total;
+	printf("%f  %f	rate is %f\r\n",meminfo.total,meminfo.free,rate);
+	fclose(fp);
+	return 1;
+}
+
+int cal_cpuoccupy(CPU_OCCUPY *o, CPU_OCCUPY *n) 
+{   
+	unsigned long od, nd;
+	double cpu_use = 0;   
+ 
+	od = (unsigned long) (o->user + o->nice + o->system +o->idle + o->lowait + o->irq + o->softirq);//第一次(用户+优先级+系统+空闲)的时间再赋给od
+	nd = (unsigned long) (n->user + n->nice + n->system +n->idle + n->lowait + n->irq + n->softirq);//第二次(用户+优先级+系统+空闲)的时间再赋给od
+ 
+	double sum = nd - od;
+	double idle = n->idle - o->idle;
+	cpu_use = idle/sum;
+ 
+ 
+	printf("%f\r\n",cpu_use);
+ 
+	idle = n->user + n->system + n->nice -o->user - o->system- o->nice;
+	cpu_use = idle/sum;
+ 
+	printf("%f\r\n",cpu_use);
+	return 0;
+}
+ 
+void get_cpuoccupy(CPU_OCCUPY *cpu_occupy) //对无类型get函数含有一个形参结构体类弄的指针O
+{   
+	FILE *fd;                  
+	char buff[256]; 
+ 
+	fd = fopen ("/proc/stat", "r"); 
+	fgets (buff, sizeof(buff), fd);
+	sscanf (buff, "%s %u %u %u %u %u %u %u", cpu_occupy->name, &cpu_occupy->user, &cpu_occupy->nice,&cpu_occupy->system, &cpu_occupy->idle,&cpu_occupy->lowait,&cpu_occupy->irq,&cpu_occupy->softirq);
+	printf("%s %u %u %u %u %u %u %u\r\n", cpu_occupy->name,cpu_occupy->user, cpu_occupy->nice,cpu_occupy->system, cpu_occupy->idle,cpu_occupy->lowait,cpu_occupy->irq,cpu_occupy->softirq);
+	printf("%s %u\r\n", cpu_occupy->name,cpu_occupy->user);
+	fclose(fd);     
+}
+
 int main(int argc, char **argv)
 {
 	struct tc_bpf *skel;
@@ -134,6 +214,19 @@ int main(int argc, char **argv)
 	struct sock_key lookup_key, next_key;
 	unsigned int tx_byte = 0;
 	for (;;) {
+		CPU_OCCUPY cpu_stat1;
+		CPU_OCCUPY cpu_stat2;
+		int cpu;
+		//获取 cpu 使用情况
+		cpu_stat2 = cpu_stat1;
+		get_cpuoccupy(&cpu_stat1);
+	
+		//计算cpu使用率
+		cpu = cal_cpuoccupy((CPU_OCCUPY *)&cpu_stat1, (CPU_OCCUPY *)&cpu_stat2);
+		printf("cpu: %d\n",cpu);
+		//获取内存
+		get_meminfo();
+		
 		/* trigger our BPF program */
 		// 首次查找, key 设置为不存在, 从头开始遍历
 		lookup_key.family = 3;
@@ -148,6 +241,9 @@ int main(int argc, char **argv)
 				}
 			}
 			lookup_key = next_key;
+			if(tx_byte/1024 > ZSTD_SPEED) {
+				setsockopt();
+			}
 		}
 		if(lookup_key.family != 3) {
 			int result = bpf_map_delete_elem(map_send_bytes_fd, &lookup_key);
@@ -155,7 +251,8 @@ int main(int argc, char **argv)
 				printf("Failed to delete element from the map: %d (%s)\n", result, strerror(errno));
 			}
 		}
-		sleep(3);
+
+		sleep(6);
 	}
 
 cleanup:
