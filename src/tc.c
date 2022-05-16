@@ -2,21 +2,18 @@
 /* Copyright (c) 2020 Facebook */
 #include <stdio.h>
 #include <errno.h>
-#include <unistd.h>
 #include <sys/resource.h>
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 
 #include "tc.skel.h"
 #include "tc.h"
+#include "bpf_common.h"
 
-#define BPF_SYSFS_ROOT "/sys/fs/bpf"
-#define PATH_MAX 512
 /*
 详细信息请参照 note.md
 不压缩传输速率: T1 = D/N
@@ -26,44 +23,6 @@ ZSTD 1.3.4 压缩1/2.877 + N/470 + N/1380 = 0.35 + N*0.00285
 得出结论: 对于ZSTD 1.3.4 在传输速率 小于 228 MBps 时, 应该使用压缩算法
 */
 #define ZSTD_SPEED 228
-
-struct bpf_progs_desc {
-	char name[256];
-	enum bpf_prog_type type;
-	struct bpf_program *prog;
-};
-
-static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
-{
-	return vfprintf(stderr, format, args);
-}
-
-static void bump_memlock_rlimit(void)
-{
-	struct rlimit rlim_new = {
-		.rlim_cur	= RLIM_INFINITY,
-		.rlim_max	= RLIM_INFINITY,
-	};
-
-	if (setrlimit(RLIMIT_MEMLOCK, &rlim_new)) {
-		fprintf(stderr, "Failed to increase RLIMIT_MEMLOCK limit!\n");
-		exit(1);
-	}
-}
-
-void construct_mount_path(char* pathame, char* prog_name) 
-{
-	int len = snprintf(pathame, PATH_MAX, "%s/%s", BPF_SYSFS_ROOT, prog_name);
-	printf("mount path : %s\n", pathame);
-	if (len < 0) {
-		fprintf(stderr, "Error: Program name '%s' is invalid\n", prog_name);
-		exit(1);
-	} else if (len >= PATH_MAX) {
-		fprintf(stderr, "Error: Path name '%s' is too long\n", prog_name);
-		exit(1);
-	}
-	return;
-}
 
 struct bpf_progs_desc bpf_prog = {
 	"classification",
@@ -242,7 +201,7 @@ int main(int argc, char **argv)
 			}
 			lookup_key = next_key;
 			if(tx_byte/1024 > ZSTD_SPEED) {
-				setsockopt();
+				// setsockopt();
 			}
 		}
 		if(lookup_key.family != 3) {
