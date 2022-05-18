@@ -1,0 +1,23 @@
+@startuml
+!theme mars
+tcp_sock *-- tcp_options_received
+tcp_sock *-- inet_connection_sock
+inet_connection_sock *-- inet_sock
+inet_sock *-- sock
+sock --> socket
+socket --> sock
+
+note "新增变量 comp_tx, 发送端\n控制是否使用压缩传输" as n1
+note "新增变量 comp_tx, 接受端\n控制是否使用压缩传输" as n2
+
+tcp_sock .. n1
+tcp_sock : struct tcp_options_received
+tcp_sock : struct inet_connection_sock
+tcp_sock : bool comp_tx
+tcp_options_received : comp_tx
+tcp_options_received .. n2
+inet_connection_sock : struct inet_sock
+inet_sock : struct sock
+sock : struct socket *socket
+socket : struct sock* sk
+@enduml

@@ -1,0 +1,55 @@
+server-1657115 [011] d..21 267336.518252: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB, skops->local_port=1234, ret=0
+
+server-1657115 [011] d.s41 267336.518305: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
+
+client-1657130 [000] d..21 267336.518443: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB, skops->local_port=12345, ret=0
+
+client-1657130 [000] d.s41 267336.518487: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=12345, skops->local_port=1234, ret=8
+
+client-1657130 [000] d.s41 267336.518507: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB, skops->local_port=1234, ret=0
+
+client-1657130 [000] d..21 267336.518525: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
+
+
+
+
+
+
+
+client-1969018 [011] d..21 268386.674150: bpf_trace_printk: client: tcp connect init
+
+client-1969018 [011] d..21 268386.674271: bpf_trace_printk: client: active established
+
+client-1969018 [011] d.s41 268386.674299: bpf_trace_printk: server: passive established
+
+server-1968990 [007] d..21 268386.674452: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB bpf_store_hdr_opt opt.port=1234, skops->local_port=1234, ret=0
+
+server-1968990 [007] d.s41 268386.674504: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
+
+client-1969018 [011] d.s41 268386.674748: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB bpf_store_hdr_opt opt.port=1234, skops->local_port=1234, ret=0
+
+client-1969018 [011] d..21 268386.674786: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
+
+server-1968990 [000] d..21 268391.674917: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB bpf_store_hdr_opt opt.port=1234, skops->local_port=1234, ret=0
+
+server-1968990 [000] d.s41 268391.674970: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
+
+client-1969018 [011] d.s41 268391.675124: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB bpf_store_hdr_opt opt.port=1234, skops->local_port=1234, ret=0
+
+client-1969018 [011] d..21 268391.675162: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
+
+server-1968990 [000] d..21 268396.675317: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB bpf_store_hdr_opt opt.port=1234, skops->local_port=1234, ret=0
+
+server-1968990 [000] d.s41 268396.675369: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
+
+client-1969018 [011] d.s41 268396.675526: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB bpf_store_hdr_opt opt.port=1234, skops->local_port=1234, ret=0
+
+client-1969018 [011] d..21 268396.675565: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
+
+server-1968990 [007] d..21 268401.675692: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB bpf_store_hdr_opt opt.port=1234, skops->local_port=1234, ret=0
+
+server-1968990 [007] d.s41 268401.675748: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
+
+client-1969018 [009] d.s41 268401.675875: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB bpf_store_hdr_opt opt.port=1234, skops->local_port=1234, ret=0
+
+client-1969018 [009] d..21 268401.675921: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8

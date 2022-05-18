@@ -53,8 +53,14 @@ int main(){
     while (1)
     {
         //向客户端发送数据
-        char str[] = "Hello World!!!!!!!!!!!!!!!!!!!!!";
+        char str[] = "Hello Client!!!!!!!!!!!!!!!!!!!!!";
+        char buffer[40];
         write(clnt_sock, str, sizeof(str));
+        
+        // read(clnt_sock, buffer, sizeof(buffer)-1);
+
+        // printf("Message form client: %s\n", buffer);
+
         sleep(5);
     }
     
