@@ -27,7 +27,8 @@ int main(){
     struct sockaddr_in serv_addr;
     memset(&serv_addr, 0, sizeof(serv_addr));  //每个字节都用0填充
     serv_addr.sin_family = AF_INET;  //使用IPv4地址
-    serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");  //具体的IP地址
+    // serv_addr.sin_addr.s_addr = inet_addr("192.168.56.26");  //具体的IP地址
+    serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
     serv_addr.sin_port = htons(1234);  //端口
     
     // client 绑定端口
@@ -75,9 +76,15 @@ int main(){
     // }  
  
 
-    bind(cli_sock, (struct sockaddr*)&cli_addr, sizeof(cli_addr));
+    // if(bind(cli_sock, (struct sockaddr*)&cli_addr, sizeof(cli_addr)) == -1){
+    //     perror("bind");  
+    //     exit(1); 
+    // }
 
-    connect(cli_sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
+    if(connect(cli_sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1){
+        perror("connect");  
+        exit(1);  
+    }
 
     // bind(cli_sock1, (struct sockaddr*)&cli_addr1, sizeof(cli_addr1));
 
@@ -89,15 +96,15 @@ int main(){
         char buffer1[40];
         char str[] = "Hello Server!!!!!!!!!!!!!!!!!!!!!";
 
-        read(cli_sock, buffer, sizeof(buffer)-1);
+        // read(cli_sock, buffer, sizeof(buffer)-1);
         // read(cli_sock1, buffer1, sizeof(buffer1)-1);
 
-        printf("Message form server: %s\n", buffer);
+        // printf("Message form server: %s\n", buffer);
         // printf("Message form server1: %s\n", buffer1);
 
         // write(cli_sock, str, sizeof(str));
 
-        // sleep(5);
+        sleep(5);
     }
 
     //关闭套接字

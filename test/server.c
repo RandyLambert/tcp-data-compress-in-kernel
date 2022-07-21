@@ -19,7 +19,9 @@ int main(){
     struct sockaddr_in serv_addr;
     memset(&serv_addr, 0, sizeof(serv_addr));  //每个字节都用0填充
     serv_addr.sin_family = AF_INET;  //使用IPv4地址
+    // serv_addr.sin_addr.s_addr = inet_addr("192.168.56.26");  //具体的IP地址
     serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");  //具体的IP地址
+
     serv_addr.sin_port = htons(1234);  //端口
     
     if(setsockopt(serv_sock, SOL_SOCKET, SO_REUSEADDR, &flag, len) == -1)  
@@ -55,7 +57,7 @@ int main(){
         //向客户端发送数据
         char str[] = "Hello Client!!!!!!!!!!!!!!!!!!!!!";
         char buffer[40];
-        write(clnt_sock, str, sizeof(str));
+        // write(clnt_sock, str, sizeof(str));
         
         // read(clnt_sock, buffer, sizeof(buffer)-1);
 

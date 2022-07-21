@@ -1,3 +1,4 @@
+// 单机, 双方都打开的循环
 server-1657115 [011] d..21 267336.518252: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB, skops->local_port=1234, ret=0
 
 server-1657115 [011] d.s41 267336.518305: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
@@ -11,11 +12,7 @@ client-1657130 [000] d.s41 267336.518507: bpf_trace_printk: BPF_SOCK_OPS_WRITE_H
 client-1657130 [000] d..21 267336.518525: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
 
 
-
-
-
-
-
+// 单机, 只打开一次的循环
 client-1969018 [011] d..21 268386.674150: bpf_trace_printk: client: tcp connect init
 
 client-1969018 [011] d..21 268386.674271: bpf_trace_printk: client: active established
@@ -38,18 +35,20 @@ client-1969018 [011] d.s41 268391.675124: bpf_trace_printk: BPF_SOCK_OPS_WRITE_H
 
 client-1969018 [011] d..21 268391.675162: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
 
-server-1968990 [000] d..21 268396.675317: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB bpf_store_hdr_opt opt.port=1234, skops->local_port=1234, ret=0
 
-server-1968990 [000] d.s41 268396.675369: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
+// 服务端 write 客户端 parse
+// 多台机器 openeuler 服务端
+<idle>-0       [000] d.s.   469.625623: bpf_trace_printk: server: passive established
 
-client-1969018 [011] d.s41 268396.675526: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB bpf_store_hdr_opt opt.port=1234, skops->local_port=1234, ret=0
+server-2142    [000] d...   469.625920: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB bpf_store_hdr_opt opt.port=1234, skops->local_port=1234, ret=0
 
-client-1969018 [011] d..21 268396.675565: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
+server-2142    [000] d...   474.626756: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB bpf_store_hdr_opt opt.port=1234, skops->local_port=1234, ret=0
 
-server-1968990 [007] d..21 268401.675692: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB bpf_store_hdr_opt opt.port=1234, skops->local_port=1234, ret=0
+// 多台机器 本机客户端
+client-2558892 [003] d..21 330097.348258: bpf_trace_printk: client: tcp connect init
 
-server-1968990 [007] d.s41 268401.675748: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
+TaskSet0-2555217 [010] d.s41 330097.349080: bpf_trace_printk: client: active established
 
-client-1969018 [009] d.s41 268401.675875: bpf_trace_printk: BPF_SOCK_OPS_WRITE_HDR_OPT_CB bpf_store_hdr_opt opt.port=1234, skops->local_port=1234, ret=0
+TaskSet0-2555217 [010] d.s41 330097.349962: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=53462, ret=8
 
-client-1969018 [009] d..21 268401.675921: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=12345, ret=8
+TaskSet0-2555217 [010] d.s41 330102.350837: bpf_trace_printk: BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=1234, skops->local_port=53462, ret=8
