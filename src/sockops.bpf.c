@@ -32,19 +32,27 @@ int bpf_tcpoptionstoa(struct bpf_sock_ops *skops)
         return 0;
     }
 
-    // bpf_sock_ops_cb_flags_set(skops,
-    //             BPF_SOCK_OPS_STATE_CB_FLAG);
-
     //return value for bpf program
 	int rv = -1;
 	int op = (int) skops->op;
     //update_event_map(op);
+    // bpf_sock_ops_cb_flags_set(skops,  skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_STATE_CB_FLAG);
+
+    // server side
 	switch (op) {
+        case BPF_SOCK_OPS_TCP_LISTEN_CB: {
+            bpf_printk("server: tcp listen initxx\n");
+            bpf_sock_ops_cb_flags_set(skops,  skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_STATE_CB_FLAG);
+            bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_PARSE_UNKNOWN_HDR_OPT_CB_FLAG);
+
+            break;
+        }
 
         //* client side
         case BPF_SOCK_OPS_TCP_CONNECT_CB: {
             bpf_printk("client: tcp connect init\n");
-            // bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_WRITE_HDR_OPT_CB_FLAG);
+            bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_STATE_CB_FLAG);
+            bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_WRITE_HDR_OPT_CB_FLAG);
 
             break;
         }
@@ -60,9 +68,7 @@ int bpf_tcpoptionstoa(struct bpf_sock_ops *skops)
             
             // bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_WRITE_HDR_OPT_CB_FLAG);
 
-            bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_PARSE_UNKNOWN_HDR_OPT_CB_FLAG);
 
-            
             break;
         }
         // * server side
@@ -79,25 +85,32 @@ int bpf_tcpoptionstoa(struct bpf_sock_ops *skops)
             //     .len  = 0,
             // };
             // int ret = bpf_load_hdr_opt(skops, &opt, sizeof(opt), 0);            
-            // bpf_printk("BPF_SOCK_OPS_PARSE_HDR_OPT_CB: opt.port=%d, ret=%d\n", __bpf_ntohs(opt.port), ret);
+            // bpf_printk("BPF_SOCK_OPS_PARSE_HDR_OPT_CB in BPF_SOCK_OPS_PASSIVE_ESTABLISHED_CB: opt.port=%d, ret=%d\n", __bpf_ntohs(opt.port), ret);
 	
-            bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_WRITE_HDR_OPT_CB_FLAG);
+            // bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_WRITE_HDR_OPT_CB_FLAG);
 
             // bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_PARSE_UNKNOWN_HDR_OPT_CB_FLAG);
             break;
             // bpf_printk("rv := %d",rv);
         }
-        // case BPF_SOCK_OPS_STATE_CB:{
-        //         bpf_printk("state: %d-->%d\n",skops->args[0], skops->args[1]);
-        //     if(skops->args[0] == BPF_TCP_LISTEN && skops->args[1] == BPF_TCP_SYN_RECV) {
-        //         bpf_printk("server: BPF_TCP_LISTEN-->BPF_TCP_SYN_RECV\n");
-        //         bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_PARSE_UNKNOWN_HDR_OPT_CB_FLAG);
-        //     }
-        //     if(skops->args[1] == BPF_TCP_SYN_SENT) {
-        //         bpf_printk("client: BPF_TCP_CLOSE-->BPF_TCP_SYN_SENT\n");
-        //         bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_WRITE_HDR_OPT_CB_FLAG);
-        //     }
-        // }
+        case BPF_SOCK_OPS_STATE_CB: {
+                bpf_printk("state: %d-->%d\n",skops->args[0], skops->args[1]);
+            if(skops->args[0] == BPF_TCP_SYN_RECV && skops->args[1] == BPF_TCP_ESTABLISHED) {
+                bpf_printk("server: BPF_TCP_LISTEN-->BPF_TCP_SYN_RECV\n");
+                struct tcp_option opt = {
+                    .kind = TCPOPT_TOA,
+                    .len  = 0,
+                };
+                int ret = bpf_load_hdr_opt(skops, &opt, sizeof(opt), 0);
+                bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_WRITE_HDR_OPT_CB_FLAG);            
+                bpf_printk("BPF_SOCK_OPS_PARSE_HDR_OPT_CB bpf_load_hdr_opt opt.port=%d, skops->local_port=%d, ret=%d\n", __bpf_ntohs(opt.port), skops->local_port,  ret);
+                // bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_PARSE_UNKNOWN_HDR_OPT_CB_FLAG);
+            }
+            if(skops->args[1] == BPF_TCP_SYN_SENT) {
+                bpf_printk("client: BPF_TCP_CLOSE-->BPF_TCP_SYN_SENT\n");
+                // bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_WRITE_HDR_OPT_CB_FLAG);
+            }
+        }
         case BPF_SOCK_OPS_HDR_OPT_LEN_CB: {
             
             //reserved space
@@ -116,19 +129,28 @@ int bpf_tcpoptionstoa(struct bpf_sock_ops *skops)
         }
 
         case BPF_SOCK_OPS_WRITE_HDR_OPT_CB: {
-            struct tcp_option opt = {
-                .kind = TCPOPT_TOA,
-                .len  = 8,	// of this option struct
-                .port = __bpf_htons(skops->local_port),
-                .addr = __bpf_htonl(0x93d4860a),
-            };
+            // server
+            struct tcp_option opt;
+            if (skops->local_port == port) {
+                opt.kind = TCPOPT_TOA;
+                opt.len  = 8;	// of this option struct
+                opt.port = __bpf_htons(1111);
+                opt.addr = __bpf_htonl(0x93d4860a);
+            } else { // client
+                bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_PARSE_UNKNOWN_HDR_OPT_CB_FLAG);
+                opt.kind = TCPOPT_TOA;
+                opt.len  = 8;	// of this option struct
+                opt.port = __bpf_htons(2222);
+                opt.addr = __bpf_htonl(0x93d4860a);
+            }
+
             /* Server sends option */
             // * write the option
             int ret = bpf_store_hdr_opt(skops, &opt, sizeof(opt), 0);
             bpf_printk("BPF_SOCK_OPS_WRITE_HDR_OPT_CB bpf_store_hdr_opt opt.port=%d, skops->local_port=%d, ret=%d\n", __bpf_ntohs(opt.port), skops->local_port, ret);
 
 			// cancel the settings
-            // bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags & ~BPF_SOCK_OPS_WRITE_HDR_OPT_CB_FLAG);
+            bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags & ~BPF_SOCK_OPS_WRITE_HDR_OPT_CB_FLAG);
             break;
         }
 
@@ -143,10 +165,12 @@ int bpf_tcpoptionstoa(struct bpf_sock_ops *skops)
             // }
 			
             // cancel the settings
-            // bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags & ~BPF_SOCK_OPS_PARSE_HDR_OPT_CB);
+            bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags & ~BPF_SOCK_OPS_PARSE_UNKNOWN_HDR_OPT_CB_FLAG);
+            if (skops->local_port == port) {
+                bpf_sock_ops_cb_flags_set(skops, skops->bpf_sock_ops_cb_flags | BPF_SOCK_OPS_WRITE_HDR_OPT_CB_FLAG);
+            }
             break;
         }
-         
         default:
             rv = -1;
         }
