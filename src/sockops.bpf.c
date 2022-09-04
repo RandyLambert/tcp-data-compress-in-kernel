@@ -41,12 +41,12 @@ static struct bpf_test_option active_fin_out	= {};
 static struct bpf_test_option active_estab_in	= {};
 static struct bpf_test_option active_fin_in	= {};
 
-// struct {
-// 	__uint(type, BPF_MAP_TYPE_SK_STORAGE);
-// 	__uint(map_flags, BPF_F_NO_PREALLOC);
-// 	__type(key, int);
-// 	__type(value, struct hdr_stg);
-// } hdr_stg_map SEC(".maps");
+struct {
+	__uint(type, BPF_MAP_TYPE_SK_STORAGE);
+	__uint(map_flags, BPF_F_NO_PREALLOC);
+	__type(key, int);
+	__type(value, struct hdr_stg);
+} hdr_stg_map SEC(".maps");
 
 static bool skops_want_cookie(const struct bpf_sock_ops *skops)
 {
@@ -260,11 +260,11 @@ static int resend_in_ack(struct bpf_sock_ops *skops)
 	if (!skops->sk)
 		return -1;
 
-	// hdr_stg = bpf_sk_storage_get(&hdr_stg_map, skops->sk, NULL, 0);
-	// if (!hdr_stg)
-	// 	return -1;
-    return 1;
-	// return !!hdr_stg->resend_syn;
+	hdr_stg = bpf_sk_storage_get(&hdr_stg_map, skops->sk, NULL, 0);
+	if (!hdr_stg)
+		return -1;
+    // return 1;
+	return !!hdr_stg->resend_syn;
 }
 
 static int nodata_opt_len(struct bpf_sock_ops *skops)
@@ -393,10 +393,10 @@ static int handle_active_estab(struct bpf_sock_ops *skops)
 
 	init_stg.resend_syn = TEST_OPTION_FLAGS(active_estab_in.flags,
 						OPTION_RESEND);
-	// if (!skops->sk || !bpf_sk_storage_get(&hdr_stg_map, skops->sk,
-	// 				      &init_stg,
-	// 				      BPF_SK_STORAGE_GET_F_CREATE))
-	// 	RET_CG_ERR(0);
+	if (!skops->sk || !bpf_sk_storage_get(&hdr_stg_map, skops->sk,
+					      &init_stg,
+					      BPF_SK_STORAGE_GET_F_CREATE))
+		RET_CG_ERR(0);
 
 	if (init_stg.resend_syn)
 		/* Don't clear the write_hdr cb now because
@@ -479,10 +479,10 @@ static int handle_passive_estab(struct bpf_sock_ops *skops)
 		clear_hdr_cb_flags(skops);
 	}
 
-	// if (!skops->sk ||
-	//     !bpf_sk_storage_get(&hdr_stg_map, skops->sk, &init_stg,
-	// 			BPF_SK_STORAGE_GET_F_CREATE))
-	// 	RET_CG_ERR(0);
+	if (!skops->sk ||
+	    !bpf_sk_storage_get(&hdr_stg_map, skops->sk, &init_stg,
+				BPF_SK_STORAGE_GET_F_CREATE))
+		RET_CG_ERR(0);
 
 	if (passive_synack_out.max_delack_ms) {
 		err = set_delack_max(skops, passive_synack_out.max_delack_ms);
@@ -511,42 +511,42 @@ static int handle_parse_hdr(struct bpf_sock_ops *skops)
 	if (th + 1 > skops->skb_data_end)
 		RET_CG_ERR(0);
 
-	// hdr_stg = bpf_sk_storage_get(&hdr_stg_map, skops->sk, NULL, 0);
-	// if (!hdr_stg)
-	// 	RET_CG_ERR(0);
+	hdr_stg = bpf_sk_storage_get(&hdr_stg_map, skops->sk, NULL, 0);
+	if (!hdr_stg)
+		RET_CG_ERR(0);
 
-	// if (hdr_stg->resend_syn || hdr_stg->fastopen)
-	// 	/* The PARSE_ALL_HDR cb flag was turned on
-	// 	 * to ensure that the previously written
-	// 	 * options have reached the peer.
-	// 	 * Those previously written option includes:
-	// 	 *     - Active side: resend_syn in ACK during syncookie
-	// 	 *      or
-	// 	 *     - Passive side: SYNACK during fastopen
-	// 	 *
-	// 	 * A valid packet has been received here after
-	// 	 * the 3WHS, so the PARSE_ALL_HDR cb flag
-	// 	 * can be cleared now.
-	// 	 */
-	// 	clear_parse_all_hdr_cb_flags(skops);
+	if (hdr_stg->resend_syn || hdr_stg->fastopen)
+		/* The PARSE_ALL_HDR cb flag was turned on
+		 * to ensure that the previously written
+		 * options have reached the peer.
+		 * Those previously written option includes:
+		 *     - Active side: resend_syn in ACK during syncookie
+		 *      or
+		 *     - Passive side: SYNACK during fastopen
+		 *
+		 * A valid packet has been received here after
+		 * the 3WHS, so the PARSE_ALL_HDR cb flag
+		 * can be cleared now.
+		 */
+		clear_parse_all_hdr_cb_flags(skops);
 
-	// if (hdr_stg->resend_syn && !active_fin_out.flags)
-	// 	/* Active side resent the syn option in ACK
-	// 	 * because the server was in syncookie mode.
-	// 	 * A valid packet has been received, so
-	// 	 * clear header cb flags if there is no
-	// 	 * more option to send.
-	// 	 */
-	// 	clear_hdr_cb_flags(skops);
+	if (hdr_stg->resend_syn && !active_fin_out.flags)
+		/* Active side resent the syn option in ACK
+		 * because the server was in syncookie mode.
+		 * A valid packet has been received, so
+		 * clear header cb flags if there is no
+		 * more option to send.
+		 */
+		clear_hdr_cb_flags(skops);
 
-	// if (hdr_stg->fastopen && !passive_fin_out.flags)
-	// 	/* Passive side was in fastopen.
-	// 	 * A valid packet has been received, so
-	// 	 * the SYNACK has reached the peer.
-	// 	 * Clear header cb flags if there is no more
-	// 	 * option to send.
-	// 	 */
-	// 	clear_hdr_cb_flags(skops);
+	if (hdr_stg->fastopen && !passive_fin_out.flags)
+		/* Passive side was in fastopen.
+		 * A valid packet has been received, so
+		 * the SYNACK has reached the peer.
+		 * Clear header cb flags if there is no more
+		 * option to send.
+		 */
+		clear_hdr_cb_flags(skops);
 
 	if (th->fin) {
 		struct bpf_test_option *fin_opt;
