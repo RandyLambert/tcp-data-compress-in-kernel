@@ -437,9 +437,13 @@ static int handle_passive_estab(struct bpf_sock_ops *skops)
 	struct tcphdr *th;
 	int err;
 
+    bpf_printk("enter handle_passive_estab, skops->remote_port: %d\n", bpf_ntohl(skops->remote_port));
+
+
 	inherit_cb_flags = skops->bpf_sock_ops_cb_flags;
 
 	err = load_option(skops, &passive_estab_in, true);
+    
 	if (err == -ENOENT) {
 		/* saved_syn is not found. It was in syncookie mode.
 		 * We have asked the active side to resend the options
@@ -449,7 +453,8 @@ static int handle_passive_estab(struct bpf_sock_ops *skops)
 		init_stg.syncookie = true;
 	}
 
-    // bpf_printk("handle_passive_estab max_delack_ms: %d, flag: %d,  passive_estab_in.rand: %d,passive_estab_in: %d, skops->remote_port: %d\n", passive_estab_in.max_delack_ms, passive_estab_in.flags, passive_estab_in.rand, bpf_ntohl(skops->remote_port));
+    bpf_printk("handle_passive_estab max_delack_ms: %d, flag: %d,  passive_estab_in.rand: %d, skops->remote_port: %d\n", passive_estab_in.max_delack_ms, passive_estab_in.flags, passive_estab_in.rand, bpf_ntohl(skops->remote_port));
+
 
 	/* ENOMSG: The bpf_test_option is not found which is fine.
 	 * Bail out now for all other errors.
