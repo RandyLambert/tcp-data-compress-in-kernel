@@ -389,7 +389,7 @@ static int handle_active_estab(struct bpf_sock_ops *skops)
 	err = load_option(skops, &active_estab_in, false);
 	if (err && err != -ENOMSG)
 		RET_CG_ERR(err);
-    // bpf_printk("handle_active_estab max_delack_ms: %d, flag: %d, active_estab_in.rand: %d, skops->remote_port: %d\n", active_estab_in.max_delack_ms, active_estab_in.flags, active_estab_in.rand, bpf_ntohl(skops->remote_port));
+    bpf_printk("handle_active_estab max_delack_ms: %d, flag: %d, active_estab_in.rand: %d, skops->remote_port: %d\n", active_estab_in.max_delack_ms, active_estab_in.flags, active_estab_in.rand, bpf_ntohl(skops->remote_port));
 
 	init_stg.resend_syn = TEST_OPTION_FLAGS(active_estab_in.flags,
 						OPTION_RESEND);
