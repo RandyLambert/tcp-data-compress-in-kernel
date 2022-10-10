@@ -6,7 +6,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <errno.h> 
-
+#include <netinet/tcp.h>
 
 int main(){
 	printf("%d\n",getpid());
@@ -22,7 +22,7 @@ int main(){
     // serv_addr.sin_addr.s_addr = inet_addr("192.168.56.26");  //具体的IP地址
     serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");  //具体的IP地址
 
-    serv_addr.sin_port = htons(1234);  //端口
+    serv_addr.sin_port = htons(1235);  //端口
     
     if(setsockopt(serv_sock, SOL_SOCKET, SO_REUSEADDR, &flag, len) == -1)  
     {  
@@ -34,7 +34,14 @@ int main(){
     {  
         perror("setsockopt2");  
         exit(1);  
-    }   
+    }
+
+    int comp_tx = 1;
+    if(setsockopt(serv_sock, SOL_TCP, 38, &comp_tx, sizeof(comp_tx)) == -1)   
+    {
+        perror("setsockopt3");
+        exit(1);
+    }
 
     bind(serv_sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
     //进入监听状态，等待用户发起请求
@@ -57,11 +64,11 @@ int main(){
         //向客户端发送数据
         char str[] = "Hello Client!!!!!!!!!!!!!!!!!!!!!";
         char buffer[40];
-         write(clnt_sock, str, sizeof(str));
+        // write(clnt_sock, str, sizeof(str));
         
-         read(clnt_sock, buffer, sizeof(buffer)-1);
+        // read(clnt_sock, buffer, sizeof(buffer)-1);
 
-         printf("Message form client: %s\n", buffer);
+        // printf("Message form client: %s\n", buffer);
 
         sleep(5);
     }

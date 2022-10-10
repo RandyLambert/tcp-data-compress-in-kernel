@@ -96,13 +96,13 @@ int main(){
         char buffer1[40];
         char str[] = "Hello Server!!!!!!!!!!!!!!!!!!!!!";
 
-        // read(cli_sock, buffer, sizeof(buffer)-1);
+        read(cli_sock, buffer, sizeof(buffer)-1);
         // read(cli_sock1, buffer1, sizeof(buffer1)-1);
 
-        // printf("Message form server: %s\n", buffer);
+        printf("Message form server: %s\n", buffer);
         // printf("Message form server1: %s\n", buffer1);
 
-        // write(cli_sock, str, sizeof(str));
+        write(cli_sock, str, sizeof(str));
 
         sleep(5);
     }

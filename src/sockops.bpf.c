@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
-/* Copyright (c) 2020 Facebook */
+/* Copyright (c) 2022 sunshouxun */
 
 #include <stddef.h>
-#include <errno.h>
+// #include <errno.h>
 #include <stdbool.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -12,34 +12,29 @@
 #include <linux/types.h>
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
-#define BPF_PROG_TEST_TCP_HDR_OPTIONS
-#include "test_tcp_hdr_options.h"
+#define BPF_PROG_TCP_COMP
+#include "tcp_comp.h"
 
 #ifndef sizeof_field
 #define sizeof_field(TYPE, MEMBER) sizeof((((TYPE *)0)->MEMBER))
 #endif
 
-__u8 test_kind = TCPOPT_EXP;
-__u16 test_magic = 0xeB9F;
-__u32 inherit_cb_flags = 0;
-int port;
-static struct bpf_test_option passive_synack_out = {
-    .flags = 4,
-    .rand = 3,
+__u8 option_kind = TCPOPT_EXP;
+__u16 option_magic = 0xeB9F;
+
+int port = 1234;
+
+static struct bpf_comp_option passive_synack_out = {
+    .flags = 6,
+	.comp_tx = 2,
+    .comp_rx = 3,
 };
-static struct bpf_test_option passive_fin_out	= {};
 
-static struct bpf_test_option passive_estab_in = {};
-static struct bpf_test_option passive_fin_in	= {};
-
-static struct bpf_test_option active_syn_out	= {
-    .flags = 4,
-    .rand = 8,
+static struct bpf_comp_option active_syn_out	= {
+    .flags = 6,
+	.comp_tx = 4,
+    .comp_rx = 5,
 };
-static struct bpf_test_option active_fin_out	= {};
-
-static struct bpf_test_option active_estab_in	= {};
-static struct bpf_test_option active_fin_in	= {};
 
 struct {
 	__uint(type, BPF_MAP_TYPE_SK_STORAGE);
@@ -53,11 +48,6 @@ static bool skops_want_cookie(const struct bpf_sock_ops *skops)
 	return skops->args[0] == BPF_WRITE_HDR_TCP_SYNACK_COOKIE;
 }
 
-static bool skops_current_mss(const struct bpf_sock_ops *skops)
-{
-	return skops->args[0] == BPF_WRITE_HDR_TCP_CURRENT_MSS;
-}
-
 static __u8 option_total_len(__u8 flags)
 {
 	__u8 i, len = 1; /* +1 for flags */
@@ -69,32 +59,32 @@ static __u8 option_total_len(__u8 flags)
 	for (i = OPTION_RESEND + 1; i < __NR_OPTION_FLAGS; i++)
 		len += !!TEST_OPTION_FLAGS(flags, i);
 
-	if (test_kind == TCPOPT_EXP)
+	if (option_kind == TCPOPT_EXP)
 		return len + TCP_BPF_EXPOPT_BASE_LEN;
 	else
 		return len + 2; /* +1 kind, +1 kind-len */
 }
 
-static void write_test_option(const struct bpf_test_option *test_opt,
+static void write_comp_option(const struct bpf_comp_option *comp_opt,
 			      __u8 *data)
 {
 	__u8 offset = 0;
 
-    bpf_printk("enter write_test_option test_opt->flags: %d, test_opt->max_delack_ms: %d, test_opt->rand: %d, OPTION_RAND: %d, OPTION_MAX_DELACK_MS: %d, TEST_OPTION_FLAGS(test_opt->flags, OPTION_RAND): %d\n", test_opt->flags, test_opt->max_delack_ms, test_opt->rand, OPTION_RAND, OPTION_MAX_DELACK_MS, TEST_OPTION_FLAGS(test_opt->flags, OPTION_RAND));
-	data[offset++] = test_opt->flags;
-	if (TEST_OPTION_FLAGS(test_opt->flags, OPTION_MAX_DELACK_MS)){
-		data[offset++] = test_opt->max_delack_ms;
-        bpf_printk("test_opt->rand fill in max_delack_ms, test_opt->max_delack_ms: %d\n",test_opt->max_delack_ms);
+    bpf_printk("enter write_comp_option comp_opt->flags: %d, comp_opt->comp_tx: %d, comp_opt->comp_rx: %d, OPTION_COMP_RX: %d, OPTION_COMP_TX: %d, TEST_OPTION_FLAGS(comp_opt->flags, OPTION_COMP_RX): %d\n", comp_opt->flags, comp_opt->comp_tx, comp_opt->comp_rx, OPTION_COMP_RX, OPTION_COMP_TX, TEST_OPTION_FLAGS(comp_opt->flags, OPTION_COMP_RX));
+	data[offset++] = comp_opt->flags;
+	if (TEST_OPTION_FLAGS(comp_opt->flags, OPTION_COMP_TX)){
+		data[offset++] = comp_opt->comp_tx;
+        bpf_printk("comp_opt->comp_rx fill in data, comp_opt->comp_tx: %d\n",comp_opt->comp_tx);
     }
 
-	if (TEST_OPTION_FLAGS(test_opt->flags, OPTION_RAND)){
-		data[offset++] = test_opt->rand;
-        bpf_printk("test_opt->rand fill in data, test_opt->rand: %d\n",test_opt->rand);
+	if (TEST_OPTION_FLAGS(comp_opt->flags, OPTION_COMP_RX)){
+		data[offset++] = comp_opt->comp_rx;
+        bpf_printk("comp_opt->comp_rx fill in data, comp_opt->comp_rx: %d\n",comp_opt->comp_rx);
     }
 }
 
 static int store_option(struct bpf_sock_ops *skops,
-			const struct bpf_test_option *test_opt)
+			const struct bpf_comp_option *comp_opt)
 {
 	union {
 		struct tcp_exprm_opt exprm;
@@ -102,19 +92,19 @@ static int store_option(struct bpf_sock_ops *skops,
 	} write_opt;
 	int err;
 
-	if (test_kind == TCPOPT_EXP) {
+	if (option_kind == TCPOPT_EXP) {
 		write_opt.exprm.kind = TCPOPT_EXP;
-		write_opt.exprm.len = option_total_len(test_opt->flags);
-		write_opt.exprm.magic = __bpf_htons(test_magic);
+		write_opt.exprm.len = option_total_len(comp_opt->flags);
+		write_opt.exprm.magic = __bpf_htons(option_magic);
 		write_opt.exprm.data32 = 0;
-		write_test_option(test_opt, write_opt.exprm.data);
+		write_comp_option(comp_opt, write_opt.exprm.data);
 		err = bpf_store_hdr_opt(skops, &write_opt.exprm,
 					sizeof(write_opt.exprm), 0);
 	} else {
-		write_opt.regular.kind = test_kind;
-		write_opt.regular.len = option_total_len(test_opt->flags);
+		write_opt.regular.kind = option_kind;
+		write_opt.regular.len = option_total_len(comp_opt->flags);
 		write_opt.regular.data32 = 0;
-		write_test_option(test_opt, write_opt.regular.data);
+		write_comp_option(comp_opt, write_opt.regular.data);
 		err = bpf_store_hdr_opt(skops, &write_opt.regular,
 					sizeof(write_opt.regular), 0);
 	}
@@ -125,24 +115,24 @@ static int store_option(struct bpf_sock_ops *skops,
 	return CG_OK;
 }
 
-static int parse_test_option(struct bpf_test_option *opt, const __u8 *start)
+static int parse_comp_option(struct bpf_comp_option *opt, const __u8 *start)
 {
 	opt->flags = *start++;
 
 
-	if (TEST_OPTION_FLAGS(opt->flags, OPTION_MAX_DELACK_MS))
-		opt->max_delack_ms = *start++;
+	if (TEST_OPTION_FLAGS(opt->flags, OPTION_COMP_TX))
+		opt->comp_tx = *start++;
 
-	if (TEST_OPTION_FLAGS(opt->flags, OPTION_RAND))
-		opt->rand = *start++;
+	if (TEST_OPTION_FLAGS(opt->flags, OPTION_COMP_RX))
+		opt->comp_rx = *start++;
 
-    bpf_printk("enter parse_test_option opt->flags: %d, opt->max_delack_ms: %d, opt->rand: %d, OPTION_RAND: %d, OPTION_MAX_DELACK_MS: %d\n", opt->flags, opt->max_delack_ms, opt->rand, OPTION_RAND, OPTION_MAX_DELACK_MS);
+    bpf_printk("enter parse_comp_option opt->flags: %d, opt->comp_tx: %d, opt->comp_rx: %d, OPTION_COMP_RX: %d, OPTION_COMP_TX: %d\n", opt->flags, opt->comp_tx, opt->comp_rx, OPTION_COMP_RX, OPTION_COMP_TX);
 
 	return 0;
 }
 
 static int load_option(struct bpf_sock_ops *skops,
-		       struct bpf_test_option *test_opt, bool from_syn)
+		       struct bpf_comp_option *comp_opt, bool from_syn)
 {
 	union {
 		struct tcp_exprm_opt exprm;
@@ -152,42 +142,42 @@ static int load_option(struct bpf_sock_ops *skops,
 
     bpf_printk("enter load_option, load_flags: %d, skops->remote_port: %d\n", load_flags, bpf_ntohl(skops->remote_port));
 
-	if (test_kind == TCPOPT_EXP) {
+	if (option_kind == TCPOPT_EXP) {
 		search_opt.exprm.kind = TCPOPT_EXP;
 		search_opt.exprm.len = 4;
-		search_opt.exprm.magic = __bpf_htons(test_magic);
+		search_opt.exprm.magic = __bpf_htons(option_magic);
 		search_opt.exprm.data32 = 0;
 		ret = bpf_load_hdr_opt(skops, &search_opt.exprm,
 				       sizeof(search_opt.exprm), load_flags);
 		if (ret < 0)
 			return ret;
-		return parse_test_option(test_opt, search_opt.exprm.data);
+		return parse_comp_option(comp_opt, search_opt.exprm.data);
 	} else {
-		search_opt.regular.kind = test_kind;
+		search_opt.regular.kind = option_kind;
 		search_opt.regular.len = 0;
 		search_opt.regular.data32 = 0;
 		ret = bpf_load_hdr_opt(skops, &search_opt.regular,
 				       sizeof(search_opt.regular), load_flags);
 		if (ret < 0)
 			return ret;
-		return parse_test_option(test_opt, search_opt.regular.data);
+		return parse_comp_option(comp_opt, search_opt.regular.data);
 	}
 }
 
 static int synack_opt_len(struct bpf_sock_ops *skops)
 {
-	struct bpf_test_option test_opt = {};
+	struct bpf_comp_option comp_opt = {};
 	__u8 optlen;
 	int err;
 
 	if (!passive_synack_out.flags)
 		return CG_OK;
 
-	err = load_option(skops, &test_opt, true);
+	err = load_option(skops, &comp_opt, true);
 
-    bpf_printk("enter synack_opt_len, after load_option, passive_synack_out.flags: %d, test_opt.rand: %d, skops->remote_port: %d\n", passive_synack_out.flags, test_opt.rand, bpf_ntohl(skops->remote_port));
+    bpf_printk("enter synack_opt_len load_option, after load_option, passive_synack_out.flags: %d, comp_opt.comp_rx: %d, skops->remote_port: %d\n", passive_synack_out.flags, comp_opt.comp_rx, bpf_ntohl(skops->remote_port));
 
-	/* bpf_test_option is not found */
+	/* bpf_comp_option is not found */
 	if (err == -ENOMSG)
 		return CG_OK;
 
@@ -206,7 +196,7 @@ static int synack_opt_len(struct bpf_sock_ops *skops)
 
 static int write_synack_opt(struct bpf_sock_ops *skops)
 {
-	struct bpf_test_option opt;
+	struct bpf_comp_option opt;
 
 	if (!passive_synack_out.flags)
 		/* We should not even be called since no header
@@ -218,7 +208,7 @@ static int write_synack_opt(struct bpf_sock_ops *skops)
 	if (skops_want_cookie(skops))
 		SET_OPTION_FLAGS(opt.flags, OPTION_RESEND);
 
-    bpf_printk("enter write_synack_opt, opt.flags: %d, opt.rand: %d, skops->remote_port: %d\n", opt.flags, opt.rand, bpf_ntohl(skops->remote_port));
+    bpf_printk("enter write_synack_opt, opt.flags: %d, opt.comp_rx: %d, skops->remote_port: %d\n", opt.flags, opt.comp_rx, bpf_ntohl(skops->remote_port));
 
 	return store_option(skops, &opt);
 }
@@ -231,7 +221,7 @@ static int syn_opt_len(struct bpf_sock_ops *skops)
 	if (!active_syn_out.flags)
 		return CG_OK;
 
-    bpf_printk("enter syn_opt_len, active_syn_out.flags: %d, skops->remote_port: %d\n", active_syn_out.flags, bpf_ntohl(skops->remote_port));
+	bpf_printk("enter syn_opt_len, active_syn_out.flags: %d, skops->remote_port: %d\n", active_syn_out.flags, bpf_ntohl(skops->remote_port));
 
 	optlen = option_total_len(active_syn_out.flags);
 	if (optlen) {
@@ -247,7 +237,7 @@ static int write_syn_opt(struct bpf_sock_ops *skops)
 {
 	if (!active_syn_out.flags)
 		RET_CG_ERR(0);
-    bpf_printk("enter write_syn_opt, active_syn_out.flags: %d, active_syn_out.rand: %d, skops->remote_port: %d\n", active_syn_out.flags, active_syn_out.rand, bpf_ntohl(skops->remote_port));
+    bpf_printk("enter write_syn_opt, active_syn_out.flags: %d, active_syn_out.comp_rx: %d, skops->remote_port: %d\n", active_syn_out.flags, active_syn_out.comp_rx, bpf_ntohl(skops->remote_port));
 
 
 	return store_option(skops, &active_syn_out);
@@ -263,7 +253,7 @@ static int resend_in_ack(struct bpf_sock_ops *skops)
 	hdr_stg = bpf_sk_storage_get(&hdr_stg_map, skops->sk, NULL, 0);
 	if (!hdr_stg)
 		return -1;
-    // return 1;
+
 	return !!hdr_stg->resend_syn;
 }
 
@@ -308,18 +298,6 @@ static int write_data_opt(struct bpf_sock_ops *skops)
 	return write_nodata_opt(skops);
 }
 
-static int current_mss_opt_len(struct bpf_sock_ops *skops)
-{
-	/* Reserve maximum that may be needed */
-	int err;
-
-	err = bpf_reserve_hdr_opt(skops, option_total_len(OPTION_MASK), 0);
-	if (err)
-		RET_CG_ERR(err);
-
-	return CG_OK;
-}
-
 static int handle_hdr_opt_len(struct bpf_sock_ops *skops)
 {
 	__u8 tcp_flags = skops_tcp_flags(skops);
@@ -329,10 +307,6 @@ static int handle_hdr_opt_len(struct bpf_sock_ops *skops)
 
 	if (tcp_flags & TCPHDR_SYN)
 		return syn_opt_len(skops);
-
-	if (skops_current_mss(skops))
-		/* The kernel is calculating the MSS */
-		return current_mss_opt_len(skops);
 
 	if (skops->skb_len)
 		return data_opt_len(skops);
@@ -363,33 +337,35 @@ static int handle_write_hdr_opt(struct bpf_sock_ops *skops)
 	return write_nodata_opt(skops);
 }
 
-static int set_delack_max(struct bpf_sock_ops *skops, __u8 max_delack_ms)
+static int set_comp_tx(struct bpf_sock_ops *skops, __u8 comp_tx)
 {
-	__u32 max_delack_us = max_delack_ms * 1000;
-
-	return bpf_setsockopt(skops, SOL_TCP, TCP_BPF_DELACK_MAX,
-			      &max_delack_us, sizeof(max_delack_us));
+	// return bpf_setsockopt(skops, SOL_TCP, TCP_COMP_TX,
+	// 		      &comp_tx, sizeof(comp_tx));
 }
 
-static int set_rto_min(struct bpf_sock_ops *skops, __u8 peer_max_delack_ms)
-{
-	__u32 min_rto_us = peer_max_delack_ms * 1000;
 
-	return bpf_setsockopt(skops, SOL_TCP, TCP_BPF_RTO_MIN, &min_rto_us,
-			      sizeof(min_rto_us));
+static int set_comp_rx(struct bpf_sock_ops *skops, __u8 peer_comp_tx)
+{
+	// return bpf_setsockopt(skops, SOL_TCP, TCP_COMP_RX,
+	// 			  &peer_comp_tx, sizeof(peer_comp_tx));
 }
 
+// client side
 static int handle_active_estab(struct bpf_sock_ops *skops)
 {
 	struct hdr_stg init_stg = {
 		.active = true,
 	};
+	
+	struct bpf_comp_option active_estab_in = {};
 	int err;
+
+    bpf_printk("enter handle_active_estab comp_tx: %d, flag: %d, active_estab_in.comp_rx: %d, skops->remote_port: %d\n", active_estab_in.comp_tx, active_estab_in.flags, active_estab_in.comp_rx, bpf_ntohl(skops->remote_port));
 
 	err = load_option(skops, &active_estab_in, false);
 	if (err && err != -ENOMSG)
 		RET_CG_ERR(err);
-    bpf_printk("handle_active_estab max_delack_ms: %d, flag: %d, active_estab_in.rand: %d, skops->remote_port: %d\n", active_estab_in.max_delack_ms, active_estab_in.flags, active_estab_in.rand, bpf_ntohl(skops->remote_port));
+    bpf_printk("handle_active_estab comp_tx: %d, flag: %d, active_estab_in.comp_rx: %d, skops->remote_port: %d\n", active_estab_in.comp_tx, active_estab_in.flags, active_estab_in.comp_rx, bpf_ntohl(skops->remote_port));
 
 	init_stg.resend_syn = TEST_OPTION_FLAGS(active_estab_in.flags,
 						OPTION_RESEND);
@@ -412,51 +388,51 @@ static int handle_active_estab(struct bpf_sock_ops *skops)
 		 * handle_parse_hdr().
 		 */
 		set_parse_all_hdr_cb_flags(skops);
-	else if (!active_fin_out.flags)
+	else
 		/* No options will be written from now */
 		clear_hdr_cb_flags(skops);
+	
+	// use map data
+	// if (active_syn_out.comp_tx == 1 && active_estab_in.comp_rx == 1) {
+	// 	err = set_comp_tx(skops, active_estab_in.comp_rx);
+	// 	if (err)
+	// 		RET_CG_ERR(err);
+	// }
 
-	if (active_syn_out.max_delack_ms) {
-		err = set_delack_max(skops, active_syn_out.max_delack_ms);
-		if (err)
-			RET_CG_ERR(err);
-	}
-
-	if (active_estab_in.max_delack_ms) {
-		err = set_rto_min(skops, active_estab_in.max_delack_ms);
-		if (err)
-			RET_CG_ERR(err);
-	}
+	// if (active_syn_out.comp_rx == 1 && active_estab_in.comp_tx == 1) {
+	// 	err = set_comp_rx(skops, active_estab_in.comp_tx);
+	// 	if (err)
+	// 		RET_CG_ERR(err);
+	// }
 
 	return CG_OK;
 }
 
+// server side
 static int handle_passive_estab(struct bpf_sock_ops *skops)
 {
 	struct hdr_stg init_stg = {};
+	struct bpf_comp_option passive_estab_in = {};
 	struct tcphdr *th;
+
 	int err;
 
-    bpf_printk("enter handle_passive_estab, skops->remote_port: %d\n", bpf_ntohl(skops->remote_port));
-
-
-	inherit_cb_flags = skops->bpf_sock_ops_cb_flags;
+    bpf_printk("enter handle_passive_estab passive_estab_in.comp_tx: %d, flag: %d, passive_estab_in.comp_rx: %d, skops->remote_port: %d\n", passive_estab_in.comp_tx, passive_estab_in.flags, passive_estab_in.comp_rx, bpf_ntohl(skops->remote_port));
 
 	err = load_option(skops, &passive_estab_in, true);
     
 	if (err == -ENOENT) {
 		/* saved_syn is not found. It was in syncookie mode.
 		 * We have asked the active side to resend the options
-		 * in ACK, so try to find the bpf_test_option from ACK now.
+		 * in ACK, so try to find the bpf_comp_option from ACK now.
 		 */
 		err = load_option(skops, &passive_estab_in, false);
 		init_stg.syncookie = true;
 	}
 
-    bpf_printk("handle_passive_estab max_delack_ms: %d, flag: %d,  passive_estab_in.rand: %d, skops->remote_port: %d\n", passive_estab_in.max_delack_ms, passive_estab_in.flags, passive_estab_in.rand, bpf_ntohl(skops->remote_port));
+    bpf_printk("handle_passive_estab passive_estab_in.comp_tx: %d, flag: %d, passive_estab_in.comp_rx: %d, skops->remote_port: %d\n", passive_estab_in.comp_tx, passive_estab_in.flags, passive_estab_in.comp_rx, bpf_ntohl(skops->remote_port));
 
-
-	/* ENOMSG: The bpf_test_option is not found which is fine.
+	/* ENOMSG: The bpf_comp_option is not found which is fine.
 	 * Bail out now for all other errors.
 	 */
 	if (err && err != -ENOMSG)
@@ -479,7 +455,7 @@ static int handle_passive_estab(struct bpf_sock_ops *skops)
 		 */
 		set_parse_all_hdr_cb_flags(skops);
 		init_stg.fastopen = true;
-	} else if (!passive_fin_out.flags) {
+	} else {
 		/* No options will be written from now */
 		clear_hdr_cb_flags(skops);
 	}
@@ -489,17 +465,18 @@ static int handle_passive_estab(struct bpf_sock_ops *skops)
 				BPF_SK_STORAGE_GET_F_CREATE))
 		RET_CG_ERR(0);
 
-	if (passive_synack_out.max_delack_ms) {
-		err = set_delack_max(skops, passive_synack_out.max_delack_ms);
-		if (err)
-			RET_CG_ERR(err);
-	}
 
-	if (passive_estab_in.max_delack_ms) {
-		err = set_rto_min(skops, passive_estab_in.max_delack_ms);
-		if (err)
-			RET_CG_ERR(err);
-	}
+	// if (passive_synack_out.comp_tx == 1 && passive_estab_in.comp_rx == 1) {
+	// 	err = set_comp_tx(skops, passive_estab_in.comp_rx);
+	// 	if (err)
+	// 		RET_CG_ERR(err);
+	// }
+
+	// if (passive_synack_out.comp_rx == 1 && passive_estab_in.comp_tx == 1) {
+	// 	err = set_comp_rx(skops, passive_estab_in.comp_tx);
+	// 	if (err)
+	// 		RET_CG_ERR(err);
+	// }
 
 	return CG_OK;
 }
@@ -520,7 +497,7 @@ static int handle_parse_hdr(struct bpf_sock_ops *skops)
 	if (!hdr_stg)
 		RET_CG_ERR(0);
 
-	if (hdr_stg->resend_syn || hdr_stg->fastopen)
+	if (hdr_stg->resend_syn || hdr_stg->fastopen) {
 		/* The PARSE_ALL_HDR cb flag was turned on
 		 * to ensure that the previously written
 		 * options have reached the peer.
@@ -535,36 +512,21 @@ static int handle_parse_hdr(struct bpf_sock_ops *skops)
 		 */
 		clear_parse_all_hdr_cb_flags(skops);
 
-	if (hdr_stg->resend_syn && !active_fin_out.flags)
 		/* Active side resent the syn option in ACK
 		 * because the server was in syncookie mode.
+		 * A valid packet has been received, so
+		 * the SYNACK has reached the peer.
+		 * Clear header cb flags if there is no more
+		 * option to send.
+		 *
+		 * or
+		 *
+		 * Passive side was in fastopen.
 		 * A valid packet has been received, so
 		 * clear header cb flags if there is no
 		 * more option to send.
 		 */
 		clear_hdr_cb_flags(skops);
-
-	if (hdr_stg->fastopen && !passive_fin_out.flags)
-		/* Passive side was in fastopen.
-		 * A valid packet has been received, so
-		 * the SYNACK has reached the peer.
-		 * Clear header cb flags if there is no more
-		 * option to send.
-		 */
-		clear_hdr_cb_flags(skops);
-
-	if (th->fin) {
-		struct bpf_test_option *fin_opt;
-		int err;
-
-		if (hdr_stg->active)
-			fin_opt = &active_fin_in;
-		else
-			fin_opt = &passive_fin_in;
-
-		err = load_option(skops, fin_opt, false);
-		if (err && err != -ENOMSG)
-			RET_CG_ERR(err);
 	}
 
 	return CG_OK;
