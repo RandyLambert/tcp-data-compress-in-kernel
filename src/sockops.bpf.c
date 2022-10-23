@@ -2,7 +2,7 @@
 /* Copyright (c) 2022 sunshouxun */
 
 #include <stddef.h>
-// #include <errno.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -26,14 +26,14 @@ int port = 1234;
 
 static struct bpf_comp_option passive_synack_out = {
     .flags = 6,
-	.comp_tx = 2,
-    .comp_rx = 3,
+	.comp_tx = 1,
+    .comp_rx = 1,
 };
 
 static struct bpf_comp_option active_syn_out	= {
     .flags = 6,
-	.comp_tx = 4,
-    .comp_rx = 5,
+	.comp_tx = 1,
+    .comp_rx = 1,
 };
 
 struct {
@@ -337,17 +337,19 @@ static int handle_write_hdr_opt(struct bpf_sock_ops *skops)
 	return write_nodata_opt(skops);
 }
 
-static int set_comp_tx(struct bpf_sock_ops *skops, __u8 comp_tx)
+static int set_comp_tx(struct bpf_sock_ops *skops, __u32 comp_tx)
 {
 	// return bpf_setsockopt(skops, SOL_TCP, TCP_COMP_TX,
 	// 		      &comp_tx, sizeof(comp_tx));
+	return 0;
 }
 
 
-static int set_comp_rx(struct bpf_sock_ops *skops, __u8 peer_comp_tx)
+static int set_comp_rx(struct bpf_sock_ops *skops, __u32 peer_comp_tx)
 {
 	// return bpf_setsockopt(skops, SOL_TCP, TCP_COMP_RX,
 	// 			  &peer_comp_tx, sizeof(peer_comp_tx));
+	return 0;
 }
 
 // client side
@@ -359,8 +361,6 @@ static int handle_active_estab(struct bpf_sock_ops *skops)
 	
 	struct bpf_comp_option active_estab_in = {};
 	int err;
-
-    bpf_printk("enter handle_active_estab comp_tx: %d, flag: %d, active_estab_in.comp_rx: %d, skops->remote_port: %d\n", active_estab_in.comp_tx, active_estab_in.flags, active_estab_in.comp_rx, bpf_ntohl(skops->remote_port));
 
 	err = load_option(skops, &active_estab_in, false);
 	if (err && err != -ENOMSG)
@@ -393,17 +393,17 @@ static int handle_active_estab(struct bpf_sock_ops *skops)
 		clear_hdr_cb_flags(skops);
 	
 	// use map data
-	// if (active_syn_out.comp_tx == 1 && active_estab_in.comp_rx == 1) {
-	// 	err = set_comp_tx(skops, active_estab_in.comp_rx);
-	// 	if (err)
-	// 		RET_CG_ERR(err);
-	// }
+	if (active_syn_out.comp_tx == 1 && active_estab_in.comp_rx == 1) {
+		err = set_comp_tx(skops, active_estab_in.comp_rx);
+		if (err)
+			RET_CG_ERR(err);
+	}
 
-	// if (active_syn_out.comp_rx == 1 && active_estab_in.comp_tx == 1) {
-	// 	err = set_comp_rx(skops, active_estab_in.comp_tx);
-	// 	if (err)
-	// 		RET_CG_ERR(err);
-	// }
+	if (active_syn_out.comp_rx == 1 && active_estab_in.comp_tx == 1) {
+		err = set_comp_rx(skops, active_estab_in.comp_tx);
+		if (err)
+			RET_CG_ERR(err);
+	}
 
 	return CG_OK;
 }
@@ -416,8 +416,6 @@ static int handle_passive_estab(struct bpf_sock_ops *skops)
 	struct tcphdr *th;
 
 	int err;
-
-    bpf_printk("enter handle_passive_estab passive_estab_in.comp_tx: %d, flag: %d, passive_estab_in.comp_rx: %d, skops->remote_port: %d\n", passive_estab_in.comp_tx, passive_estab_in.flags, passive_estab_in.comp_rx, bpf_ntohl(skops->remote_port));
 
 	err = load_option(skops, &passive_estab_in, true);
     
@@ -466,17 +464,17 @@ static int handle_passive_estab(struct bpf_sock_ops *skops)
 		RET_CG_ERR(0);
 
 
-	// if (passive_synack_out.comp_tx == 1 && passive_estab_in.comp_rx == 1) {
-	// 	err = set_comp_tx(skops, passive_estab_in.comp_rx);
-	// 	if (err)
-	// 		RET_CG_ERR(err);
-	// }
+	if (passive_synack_out.comp_tx == 1 && passive_estab_in.comp_rx == 1) {
+		err = set_comp_tx(skops, passive_estab_in.comp_rx);
+		if (err)
+			RET_CG_ERR(err);
+	}
 
-	// if (passive_synack_out.comp_rx == 1 && passive_estab_in.comp_tx == 1) {
-	// 	err = set_comp_rx(skops, passive_estab_in.comp_tx);
-	// 	if (err)
-	// 		RET_CG_ERR(err);
-	// }
+	if (passive_synack_out.comp_rx == 1 && passive_estab_in.comp_tx == 1) {
+		err = set_comp_rx(skops, passive_estab_in.comp_tx);
+		if (err)
+			RET_CG_ERR(err);
+	}
 
 	return CG_OK;
 }
