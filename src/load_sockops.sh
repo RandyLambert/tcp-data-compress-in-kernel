@@ -14,7 +14,7 @@ set -e
 
 # Load and attach the bpf_sockops program
 # sudo bpftool prog load bpf_sockops.bpf.o /sys/fs/bpf/bpf_sockops
-sudo bpftool cgroup attach /sys/fs/cgroup sock_ops pinned /sys/fs/bpf/bpf_tcpoptionstoa
+sudo bpftool cgroup attach /sys/fs/cgroup sock_ops pinned /sys/fs/bpf/bpf_tcp_comp_option
 # Extract the id of the sockhash map used by the bpf_sockops program
 # This map is then pinned to the bpf virtual file system
 
