@@ -55,5 +55,5 @@ client
 src/.output/
 src/tc
 src/sockops
-
 .vscode/
+test/test_sockops

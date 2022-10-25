@@ -7,6 +7,9 @@
 #include <netinet/in.h>
 #include <errno.h> 
 #include <netinet/tcp.h>
+// #include <linux/tcp.h>
+#include <linux/kernel.h>
+#include <sys/types.h>
 
 int main(){
 	printf("%d\n",getpid());
@@ -37,7 +40,7 @@ int main(){
     }
 
     int comp_tx = 1;
-    if(setsockopt(serv_sock, SOL_TCP, 38, &comp_tx, sizeof(comp_tx)) == -1)   
+    if(setsockopt(serv_sock, SOL_TCP, 39, &comp_tx, sizeof(comp_tx)) == -1)   
     {
         perror("setsockopt3");
         exit(1);
